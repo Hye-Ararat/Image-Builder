@@ -122,6 +122,7 @@ function sleep(ms) {
     });
 }
 async function main() {
+    if (!fs.existsSync('./temp')) fs.mkdirSync('./temp');
     for (const configFile of fs.readdirSync('./config')) {
         await new Promise((resolve, reject) => {
             const config = require('./config/' + configFile)
