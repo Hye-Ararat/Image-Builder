@@ -137,7 +137,7 @@ async function main() {
                 var zeroseconds = d.getSeconds() < 10 ? "0" : ""
                 var date = `${d.getFullYear()}-${zero + d.getMonth()}-${zeroday + d.getDate()}-${zerohours + d.getHours()}${zerominutes + d.getMinutes()}${zeroseconds + d.getSeconds()}`
                 var id = config.os.replace(' ', '-').replace('.', "") + "-" + config.release + "-" + date
-                console.log("[LXD] Initializing instance...")
+                console.log("[LXD] ["+id+"] Initializing instance...")
                 client.post('/1.0/instances', JSON.stringify({
                     name: id,
                     "profiles": [
@@ -169,10 +169,10 @@ async function main() {
                             //console.log(JSON.parse(start_data.data).operation + "/wait?timeout=9999")
                             client.get(JSON.parse(start_data.data).operation + "/wait?timeout=9999").then(async (start_operation) => {
                                 //console.log(start_operation.data)
-                                console.log("[LXD] Done initializing instance")
+                                console.log("[LXD] ["+id+"] Done initializing instance")
                                 for (const command of config.commands) {
                                     await new Promise(async (re, rej) => {
-                                        console.log('[Exec] Running command ' + command)
+                                        console.log('[Exec] ['+id+'] Running command ' + command)
                                         try {
                                             var exec_data = JSON.parse((await client.post('/1.0/instances/' + id + "/exec", JSON.stringify({
                                                 command: ["bash", "-c", command],
@@ -203,7 +203,7 @@ async function main() {
                                 }
                                 for (const file of config.files) {
                                     await new Promise((re, rej) => {
-                                        console.log('[Upload] Uploading file ' + file.split(':')[0])
+                                        console.log('[Upload] ['+id+'] Uploading file ' + file.split(':')[0])
                                         const https = require('http')
                                         var opts = {
                                             rejectUnauthorized: false,
@@ -232,9 +232,9 @@ async function main() {
                                                 },
                                                 percent: percent
                                             }
-                                            console.log('[Upload] ' + percent + "%")
+                                            console.log('[Upload] ['+id+'] ' + percent + "%")
                                             if (data.percent == 100) {
-                                                console.log('[Upload] Finished')
+                                                console.log('[Upload] ['+id+']  Finished')
                                                 re()
                                             }
                                         }).pipe(request)
@@ -242,12 +242,12 @@ async function main() {
                                     }).catch(handleError)
                                 }
                                 try {
-                                    console.log('[Export] Exporting backup')
+                                    console.log('[Export] ['+id+'] Exporting backup')
                                     await doExport(id)
-                                    console.log('[Export] Extracting backup')
+                                    console.log('[Export] ['+id+'] Extracting backup')
                                     fs.mkdirSync('./temp/' + id + "/backup")
                                     await untar('./temp/' + id + "/backup.tar.gz", './temp/' + id + "/backup")
-                                    console.log('[Export] Moving directories')
+                                    console.log('[Export] ['+id+'] Moving directories')
                                     //fs.mkdirSync('./temp/' + id + "/backup/rootfs")
                                     //fs.mkdirSync('./temp/' + id + "/backup/meta")
                                     var fsext = require('fs-extra');
@@ -255,7 +255,7 @@ async function main() {
                                     var rootfsDir = './temp/' + id + "/backup/rootfs"
                                     fsext.moveSync('./temp/' + id + "/backup/backup/container", './temp/' + id + "/backup/meta")
                                     var metaDir = './temp/' + id + "/backup/meta"
-                                    console.log('[Editor] Edit Metadata')
+                                    console.log('[Editor] ['+id+'] Edit Metadata')
                                     const yaml = require('yaml')
                                     const yamldata = fs.readFileSync(metaDir + "/metadata.yaml").toString()
                                     var yamlparsed = yaml.parse(yamldata)
@@ -266,11 +266,12 @@ async function main() {
                                     yamlparsed.properties.release = config.release
                                     yamlparsed.properties.release = config.release
                                     fs.writeFileSync(metaDir + "/metadata.yaml", yaml.stringify(yamlparsed))
-                                    console.log('[Editor] Done editing metadata')
-                                    console.log('[Archive] Compressing files')
+                                    console.log('[Editor] ['+id+'] Done editing metadata')
+                                    console.log('[Archive] ['+id+'] Compressing files')
                                     await tarfiles(metaDir, ".", "../../lxd.tar.xz")
                                     await tarfiles(rootfsDir, ".", "../../rootfs.tar.xz")
                                     fs.rmSync('./temp/' + id + "/backup", { recursive: true, force: true })
+                                    console.log('[LXD] ['+id+'] Remove build container')
                                     client.put('/1.0/instances/' + id + "/state", JSON.stringify({
                                         "action": "stop",
                                         "force": true,
@@ -282,13 +283,14 @@ async function main() {
                                         //console.log(JSON.parse(start_data.data).operation + "/wait?timeout=9999")
                                         client.get(JSON.parse(start_data2.data).operation + "/wait?timeout=9999").then(async (start_operation2) => {
                                             await client.delete('/1.0/instances/' + id)
-
+                                            console.log('[LXD] ['+id+'] Removed build container')
                                             if (require('./config.json').server['do-upload'] == true) {
+                                                console.log('[Remote] ['+id+'] Uploading is enabled')
                                                 var e = require('./config.json')
                                                 for (const server of e.server.servers) {
                                                     await new Promise((resolvee, rejecte) => {
                                                         const FormData = require('form-data')
-
+                                    
                                                         const data = new FormData()
                                                         data.append('rootfs', fs.createReadStream('./temp/' + id + "/rootfs.tar.xz"))
                                                         data.append('lxdmeta', fs.createReadStream('./temp/' + id + "/lxd.tar.xz"))
@@ -298,14 +300,14 @@ async function main() {
                                                         data.append('release', config.release)
                                                         data.append('releasetitle', config.release)
                                                         data.append('variant', config.variant)
-
+console.log('[Remote] ['+id+'] Uploading to ' + server.url)
                                                         axios.post(server.url + 'images', data, {
                                                             maxBodyLength: Infinity, headers: {
                                                                 authorization: "Bearer " + server.auth
                                                             }
                                                         }).then(data => {
                                                             //console.log(data.data)
-                                                            console.log('[Done] Built and Uploaded image ' + id + " to " + server.url)
+                                                            console.log('[Remote] ['+id+'] Built and Uploaded image to ' + server.url)
                                                             resolvee()
                                                         }).catch(handleError)
                                                     })
