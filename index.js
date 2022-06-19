@@ -138,7 +138,7 @@ async function main() {
             client.post('/1.0/instances', JSON.stringify({
                 name: id,
                 "profiles": [
-                    "default"
+                    require('./config.json').default_profile
                 ],
                 "architecture": "x86_64",
                 source: {
