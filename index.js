@@ -279,27 +279,36 @@ async function main() {
                                     //console.log(JSON.parse(start_data.data).operation + "/wait?timeout=9999")
                                     client.get(JSON.parse(start_data2.data).operation + "/wait?timeout=9999").then(async (start_operation2) => {
                                         await client.delete('/1.0/instances/' + id)
+                                    
                                         if (require('./config.json').server['do-upload'] == true) {
-                                     
-                                     
-                                            const FormData = require('form-data')
                                             var e = require('./config.json')
-                                            const data = new FormData()
-                                            data.append('rootfs', fs.createReadStream('./temp/' + id + "/rootfs.tar.xz"))
-                                            data.append('lxdmeta', fs.createReadStream('./temp/' + id + "/lxd.tar.xz"))
-                                            data.append('aliases', config.aliases)
-                                            data.append('architecture', config.architecture)
-                                            data.append('os', config.os)
-                                            data.append('release', config.release)
-                                            data.append('releasetitle', config.release)
-                                            data.append('variant', config.variant)
-                                            
-                                            axios.post(e.server.url + 'images', data, {maxBodyLength: Infinity, headers: {
-                                                authorization: "Bearer " + e.server.auth
-                                            }}).then(data => {
-                                                //console.log(data.data)
-                                                console.log('[Done] Built and Uploaded image ' + id)
-                                            }).catch(handleError)
+                                            for (const server of e.server.servers) {
+                                                await new Promise((resolvee, rejecte) => {
+                                                    const FormData = require('form-data')
+                                           
+                                                    const data = new FormData()
+                                                    data.append('rootfs', fs.createReadStream('./temp/' + id + "/rootfs.tar.xz"))
+                                                    data.append('lxdmeta', fs.createReadStream('./temp/' + id + "/lxd.tar.xz"))
+                                                    data.append('aliases', config.aliases)
+                                                    data.append('architecture', config.architecture)
+                                                    data.append('os', config.os)
+                                                    data.append('release', config.release)
+                                                    data.append('releasetitle', config.release)
+                                                    data.append('variant', config.variant)
+                                                    
+                                                    axios.post(server.url + 'images', data, {maxBodyLength: Infinity, headers: {
+                                                        authorization: "Bearer " + server.auth
+                                                    }}).then(data => {
+                                                        //console.log(data.data)
+                                                        console.log('[Done] Built and Uploaded image ' + id + " to " + server.url)
+                                                        resolvee()
+                                                    }).catch(handleError)
+                                                })
+                                            }
+                                        
+                                           
+                                     
+                                         
                                         } else {
                                             console.log('[Done] Built image ' + id)
                                         }
