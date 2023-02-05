@@ -1,6 +1,7 @@
 const axios = require('axios').default
 const ws = require('ws')
 const fs = require('fs')
+const path = require("path");
 /**
  * @type {import('axios').Axios & {ws: (url) => import('ws').WebSocket}}
  */
@@ -137,7 +138,7 @@ async function main() {
                 var zeroseconds = d.getSeconds() < 10 ? "0" : ""
                 var date = `${d.getFullYear()}-${zero + d.getMonth()}-${zeroday + d.getDate()}-${zerohours + d.getHours()}${zerominutes + d.getMinutes()}${zeroseconds + d.getSeconds()}`
                 var id = config.os.replace(' ', '-').replace('.', "") + "-" + config.release + "-" + date
-                console.log("[LXD] ["+id+"] Initializing instance...")
+                console.log("[LXD] [" + id + "] Initializing instance...")
                 client.post('/1.0/instances', JSON.stringify({
                     name: id,
                     "profiles": [
@@ -169,10 +170,61 @@ async function main() {
                             //console.log(JSON.parse(start_data.data).operation + "/wait?timeout=9999")
                             client.get(JSON.parse(start_data.data).operation + "/wait?timeout=9999").then(async (start_operation) => {
                                 //console.log(start_operation.data)
-                                console.log("[LXD] ["+id+"] Done initializing instance")
+                                for (const file of config.files) {
+                                    try {
+                                        await new Promise((re, rej) => {
+                                            try {
+                                                console.log('[Upload] [' + id + '] Uploading file ' + file.split(':')[0])
+                                                const https = require('http')
+                                                var opts = {
+                                                    rejectUnauthorized: false,
+                                                    method: "POST",
+                                                    socketPath: "/var/snap/lxd/common/lxd/unix.socket",
+                                                    path: encodeURI("/1.0/instances/" + id + "/files?path=" + file.split(':')[1]),
+                                                    headers: {
+                                                        "Content-Type": `application/octet-stream`
+                                                    },
+                                                }
+                                                var request = https.request(opts, function (response) {
+                                                    response.on('error', (err) => {
+                                                        rej(err)
+                                                    })
+                                                });
+                                                console.log(fs.existsSync(file.split(':')[0]))
+                                                var ReadStream = fs.createReadStream(file.split(':')[0])
+                                                var bytes = 0
+                                                var size = fs.lstatSync(ReadStream.path).size;
+                                                ReadStream.on('data', (chunk) => {
+                                                    bytes += chunk.length;
+                                                    var percent = ((bytes) * 100) / size
+                                                    var data = {
+                                                        bytes: {
+                                                            sent: bytes,
+                                                            total: size
+                                                        },
+                                                        percent: percent
+                                                    }
+                                                    console.log('[Upload] [' + id + '] ' + percent + "%")
+                                                    if (data.percent == 100) {
+                                                        console.log('[Upload] [' + id + ']  Finished')
+                                                        re()
+                                                    }
+                                                }).pipe(request)
+
+                                            } catch (error) {
+                                                console.log(error)
+                                            }
+
+                                        }).catch(handleError)
+                                    } catch (error) {
+                                        console.log(error)
+                                    }
+
+                                }
+                                console.log("[LXD] [" + id + "] Done initializing instance")
                                 for (const command of config.commands) {
                                     await new Promise(async (re, rej) => {
-                                        console.log('[Exec] ['+id+'] Running command ' + command)
+                                        console.log('[Exec] [' + id + '] Running command ' + command)
                                         try {
                                             var exec_data = JSON.parse((await client.post('/1.0/instances/' + id + "/exec", JSON.stringify({
                                                 command: ["bash", "-c", command],
@@ -201,53 +253,14 @@ async function main() {
                                     }).catch(handleError)
 
                                 }
-                                for (const file of config.files) {
-                                    await new Promise((re, rej) => {
-                                        console.log('[Upload] ['+id+'] Uploading file ' + file.split(':')[0])
-                                        const https = require('http')
-                                        var opts = {
-                                            rejectUnauthorized: false,
-                                            method: "POST",
-                                            socketPath: "/var/snap/lxd/common/lxd/unix.socket",
-                                            path: encodeURI("/1.0/instances/" + id + "/files?path=" + file.split(':')[1]),
-                                            headers: {
-                                                "Content-Type": `application/octet-stream`
-                                            },
-                                        }
-                                        var request = https.request(opts, function (response) {
-                                            response.on('error', (err) => {
-                                                rej(err)
-                                            })
-                                        });
-                                        var ReadStream = fs.createReadStream(file.split(':')[0])
-                                        var bytes = 0
-                                        var size = fs.lstatSync(ReadStream.path).size;
-                                        ReadStream.on('data', (chunk) => {
-                                            bytes += chunk.length;
-                                            var percent = ((bytes) * 100) / size
-                                            var data = {
-                                                bytes: {
-                                                    sent: bytes,
-                                                    total: size
-                                                },
-                                                percent: percent
-                                            }
-                                            console.log('[Upload] ['+id+'] ' + percent + "%")
-                                            if (data.percent == 100) {
-                                                console.log('[Upload] ['+id+']  Finished')
-                                                re()
-                                            }
-                                        }).pipe(request)
 
-                                    }).catch(handleError)
-                                }
                                 try {
-                                    console.log('[Export] ['+id+'] Exporting backup')
+                                    console.log('[Export] [' + id + '] Exporting backup')
                                     await doExport(id)
-                                    console.log('[Export] ['+id+'] Extracting backup')
+                                    console.log('[Export] [' + id + '] Extracting backup')
                                     fs.mkdirSync('./temp/' + id + "/backup")
                                     await untar('./temp/' + id + "/backup.tar.gz", './temp/' + id + "/backup")
-                                    console.log('[Export] ['+id+'] Moving directories')
+                                    console.log('[Export] [' + id + '] Moving directories')
                                     //fs.mkdirSync('./temp/' + id + "/backup/rootfs")
                                     //fs.mkdirSync('./temp/' + id + "/backup/meta")
                                     var fsext = require('fs-extra');
@@ -255,10 +268,20 @@ async function main() {
                                     var rootfsDir = './temp/' + id + "/backup/rootfs"
                                     fsext.moveSync('./temp/' + id + "/backup/backup/container", './temp/' + id + "/backup/meta")
                                     var metaDir = './temp/' + id + "/backup/meta"
-                                    console.log('[Editor] ['+id+'] Edit Metadata')
+                                    console.log('[Editor] [' + id + '] Edit Metadata')
                                     const yaml = require('yaml')
                                     const yamldata = fs.readFileSync(metaDir + "/metadata.yaml").toString()
                                     var yamlparsed = yaml.parse(yamldata)
+
+                                    console.log('[Editor] [' + id + '] Add Templates')
+                                    let tempConfig = Object.keys(config.templates);
+                                    for (let i = 0; i < tempConfig.length; i++) {
+                                        const temp = tempConfig[i];
+                                        console.log('[Editor] [' + id + '] Adding template ' + temp + ' to config');
+                                        const tempData = config.templates[temp];
+                                        yamlparsed.templates[temp] = tempData;
+                                    }
+                                    console.log('[Editor] [' + id + '] Edit Properties')
                                     yamlparsed.architecture = config.architecture
                                     yamlparsed.properties.architecture = config.architecture
                                     yamlparsed.properties.name = config.os
@@ -266,12 +289,18 @@ async function main() {
                                     yamlparsed.properties.release = config.release
                                     yamlparsed.properties.release = config.release
                                     fs.writeFileSync(metaDir + "/metadata.yaml", yaml.stringify(yamlparsed))
-                                    console.log('[Editor] ['+id+'] Done editing metadata')
-                                    console.log('[Archive] ['+id+'] Compressing files')
+                                    console.log('[Templating] [' + id + '] Adding templates')
+                                    let templates = fs.readdirSync("./files/" + config.os + "_" + config.release + "_" + config.architecture + "/templates");
+                                    for (const template of templates) {
+                                        console.log('[Templating] [' + id + '] Adding template ' + template)
+                                        fs.cpSync("./files/" + config.os + "_" + config.release + "_" + config.architecture + "/templates" + "/" + template, metaDir + "/templates" + "/" + template);
+                                    }
+                                    console.log('[Editor] [' + id + '] Done editing metadata')
+                                    console.log('[Archive] [' + id + '] Compressing files')
                                     await tarfiles(metaDir, ".", "../../lxd.tar.xz")
                                     await tarfiles(rootfsDir, ".", "../../rootfs.tar.xz")
                                     fs.rmSync('./temp/' + id + "/backup", { recursive: true, force: true })
-                                    console.log('[LXD] ['+id+'] Remove build container')
+                                    console.log('[LXD] [' + id + '] Remove build container')
                                     client.put('/1.0/instances/' + id + "/state", JSON.stringify({
                                         "action": "stop",
                                         "force": true,
@@ -283,14 +312,15 @@ async function main() {
                                         //console.log(JSON.parse(start_data.data).operation + "/wait?timeout=9999")
                                         client.get(JSON.parse(start_data2.data).operation + "/wait?timeout=9999").then(async (start_operation2) => {
                                             await client.delete('/1.0/instances/' + id)
-                                            console.log('[LXD] ['+id+'] Removed build container')
+                                            console.log('[LXD] [' + id + '] Removed build container')
+
                                             if (require('./config.json').server['do-upload'] == true) {
-                                                console.log('[Remote] ['+id+'] Uploading is enabled')
+                                                console.log('[Remote] [' + id + '] Uploading is enabled')
                                                 var e = require('./config.json')
                                                 for (const server of e.server.servers) {
                                                     await new Promise((resolvee, rejecte) => {
                                                         const FormData = require('form-data')
-                                    
+
                                                         const data = new FormData()
                                                         data.append('rootfs', fs.createReadStream('./temp/' + id + "/rootfs.tar.xz"))
                                                         data.append('lxdmeta', fs.createReadStream('./temp/' + id + "/lxd.tar.xz"))
@@ -300,14 +330,30 @@ async function main() {
                                                         data.append('release', config.release)
                                                         data.append('releasetitle', config.release)
                                                         data.append('variant', config.variant)
-console.log('[Remote] ['+id+'] Uploading to ' + server.url)
+                                                        data.append("properties", JSON.stringify(config.properties))
+                                                        console.log('[Remote] [' + id + '] Uploading to ' + server.url)
                                                         axios.post(server.url + 'images', data, {
                                                             maxBodyLength: Infinity, headers: {
                                                                 authorization: "Bearer " + server.auth
                                                             }
                                                         }).then(data => {
                                                             //console.log(data.data)
-                                                            console.log('[Remote] ['+id+'] Built and Uploaded image to ' + server.url)
+                                                            console.log('[Remote] [' + id + '] Built and Uploaded image to ' + server.url)
+
+                                                            /*                                       function clean() {
+                                                                                                      var directory = "./temp"
+                                                                                                      fs.readdir(directory, (err, files) => {
+                                                                                                          if (err) throw err;
+                                      
+                                                                                                          for (const file of files) {
+                                                                                                              fs.unlink(path.join(directory, file), (err) => {
+                                                                                                                  if (err) throw err;
+                                                                                                              });
+                                                                                                          }
+                                                                                                      });
+                                                                                                  }
+                                                                                                  clean()
+                                                                                                  console.log('[FS] Done cleaning temp directory') */
                                                             resolvee()
                                                         }).catch(handleError)
                                                     })
