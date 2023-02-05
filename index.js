@@ -2,6 +2,7 @@ const axios = require('axios').default
 const ws = require('ws')
 const fs = require('fs')
 const path = require("path");
+const os = require("os");
 /**
  * @type {import('axios').Axios & {ws: (url) => import('ws').WebSocket}}
  */
@@ -122,14 +123,33 @@ function sleep(ms) {
         setTimeout(resolve, ms);
     });
 }
+
+function findImages() {
+    let images = [];
+    for (const image of fs.readdirSync("./images", { withFileTypes: true })) {
+        if (image.isDirectory()) {
+            for (const imageVersion of fs.readdirSync("./images/" + image.name, { withFileTypes: true })) {
+                if (imageVersion.isDirectory()) {
+                    images.push(image.name + "/" + imageVersion.name)
+                }
+            }
+        }
+    }
+    return images;
+}
+
 async function main() {
     await new Promise(async (p, q) => {
         var jobs = []
         if (!fs.existsSync('./temp')) fs.mkdirSync('./temp');
-        for (const configFile of fs.readdirSync('./config')) {
+        for (const image of findImages()) {
             jobs.push(new Promise((resolve, reject) => {
-                const config = require('./config/' + configFile)
-                if (!config.os || !config.architecture || !config.release || !config.variant || !config.aliases || !config.imageserver || !config.base || !config.commands || !config.files) handleError(new Error("Config file " + configFile + " is missing required keys."))
+                const config = require('./images/' + image + '/config.json')
+                if (!config.os || !config.architectures || !config.release || !config.variant || !config.aliases || !config.imageserver || !config.base || !config.commands || !config.files) handleError(new Error("Config file of " + config + " is missing required keys."))
+                var sysarch = os.arch()
+                if (sysarch == "x64") sysarch = "amd64"
+                if (!config.architectures.includes(sysarch)) handleError(new Error("System architecture " + sysarch + " is not supported by " + image + "."))
+                
                 var d = new Date()
                 var zero = d.getMonth() < 10 ? "0" : ""
                 var zeroday = d.getDate() < 10 ? "0" : ""
@@ -144,7 +164,7 @@ async function main() {
                     "profiles": [
                         require('./config.json').default_profile
                     ],
-                    "architecture": "x86_64",
+                    "architecture": sysarch != "arm64" ? "x86_64" : "aarch64",
                     source: {
                         "protocol": "simplestreams",
                         "server": config.imageserver,
@@ -190,8 +210,8 @@ async function main() {
                                                         rej(err)
                                                     })
                                                 });
-                                                console.log(fs.existsSync(file.split(':')[0]))
-                                                var ReadStream = fs.createReadStream(file.split(':')[0])
+                                                console.log(fs.existsSync(`./images/${image}/files/${file.split(':')[0]}`))
+                                                var ReadStream = fs.createReadStream(`./images/${image}/files/${file.split(':')[0]}`)
                                                 var bytes = 0
                                                 var size = fs.lstatSync(ReadStream.path).size;
                                                 ReadStream.on('data', (chunk) => {
@@ -282,18 +302,18 @@ async function main() {
                                         yamlparsed.templates[temp] = tempData;
                                     }
                                     console.log('[Editor] [' + id + '] Edit Properties')
-                                    yamlparsed.architecture = config.architecture
-                                    yamlparsed.properties.architecture = config.architecture
+                                    yamlparsed.architecture = sysarch == "x64" ? "amd64" : "arm64"
+                                    yamlparsed.properties.architecture = sysarch == "x64" ? "amd64" : "arm64"
                                     yamlparsed.properties.name = config.os
                                     yamlparsed.properties.os = config.os
                                     yamlparsed.properties.release = config.release
                                     yamlparsed.properties.release = config.release
                                     fs.writeFileSync(metaDir + "/metadata.yaml", yaml.stringify(yamlparsed))
                                     console.log('[Templating] [' + id + '] Adding templates')
-                                    let templates = fs.readdirSync("./files/" + config.os + "_" + config.release + "_" + config.architecture + "/templates");
+                                    let templates = fs.readdirSync(`./images/${image}/templates`);
                                     for (const template of templates) {
                                         console.log('[Templating] [' + id + '] Adding template ' + template)
-                                        fs.cpSync("./files/" + config.os + "_" + config.release + "_" + config.architecture + "/templates" + "/" + template, metaDir + "/templates" + "/" + template);
+                                        fs.cpSync(`./images/${image}` +"/templates" + "/" + template, metaDir + "/templates" + "/" + template);
                                     }
                                     console.log('[Editor] [' + id + '] Done editing metadata')
                                     console.log('[Archive] [' + id + '] Compressing files')
@@ -325,7 +345,7 @@ async function main() {
                                                         data.append('rootfs', fs.createReadStream('./temp/' + id + "/rootfs.tar.xz"))
                                                         data.append('lxdmeta', fs.createReadStream('./temp/' + id + "/lxd.tar.xz"))
                                                         data.append('aliases', config.aliases)
-                                                        data.append('architecture', config.architecture)
+                                                        data.append('architecture', sysarch == "x64" ? "amd64" : "arm64")
                                                         data.append('os', config.os)
                                                         data.append('release', config.release)
                                                         data.append('releasetitle', config.release)
