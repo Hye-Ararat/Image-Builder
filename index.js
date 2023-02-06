@@ -50,7 +50,7 @@ function untar(path, out) {
 function tarfiles(cwd, path, out) {
     return new Promise((resolve, reject) => {
         // fs.mkdirSync(out)
-        var tar = spawn('sh', ['-c', `tar -cJf ${out} ${path}`], {
+        var tar = spawn('sh', ['-c', `tar -czf ${out} ${path}`], {
             env: {
                 "XZ_DEFAULTS": "-T 8"
             },
@@ -77,7 +77,7 @@ function doExport(id) {
     return new Promise(async (resolve, reject) => {
         try {
             var export_data = JSON.parse((await client.post('/1.0/instances/' + id + "/backups", JSON.stringify({
-                "compression_algorithm": "",
+                "compression_algorithm": "gzip",
                 "container_only": false,
                 "instance_only": false,
                 "name": id + "-export",
@@ -147,7 +147,7 @@ async function main() {
                 const config = require('./images/' + image + '/config.json')
                 if (!config.os || !config.architectures || !config.release || !config.variant || !config.aliases || !config.imageserver || !config.base || !config.commands || !config.files) handleError(new Error("Config file of " + config + " is missing required keys."))
                 var sysarch = os.arch()
-                if (sysarch == "x64") sysarch = "amd64"
+                if (sysarch == "x64") sysarch = "amd64";
                 if (!config.architectures.includes(sysarch)) handleError(new Error("System architecture " + sysarch + " is not supported by " + image + "."))
                 
                 var d = new Date()
@@ -302,23 +302,25 @@ async function main() {
                                         yamlparsed.templates[temp] = tempData;
                                     }
                                     console.log('[Editor] [' + id + '] Edit Properties')
-                                    yamlparsed.architecture = sysarch == "x64" ? "amd64" : "arm64"
-                                    yamlparsed.properties.architecture = sysarch == "x64" ? "amd64" : "arm64"
+                                    yamlparsed.architecture = sysarch == "amd64" ? "x86_64" : "aarch64"
+                                    yamlparsed.properties.architecture = sysarch == "amd64" ? "x86_64" : "aarch64"
                                     yamlparsed.properties.name = config.os
                                     yamlparsed.properties.os = config.os
                                     yamlparsed.properties.release = config.release
                                     yamlparsed.properties.release = config.release
                                     fs.writeFileSync(metaDir + "/metadata.yaml", yaml.stringify(yamlparsed))
                                     console.log('[Templating] [' + id + '] Adding templates')
+                                    if (fs.existsSync(`./images/${image}/templates`)) {
                                     let templates = fs.readdirSync(`./images/${image}/templates`);
                                     for (const template of templates) {
                                         console.log('[Templating] [' + id + '] Adding template ' + template)
                                         fs.cpSync(`./images/${image}` +"/templates" + "/" + template, metaDir + "/templates" + "/" + template);
                                     }
+                                    }
                                     console.log('[Editor] [' + id + '] Done editing metadata')
                                     console.log('[Archive] [' + id + '] Compressing files')
-                                    await tarfiles(metaDir, ".", "../../lxd.tar.xz")
-                                    await tarfiles(rootfsDir, ".", "../../rootfs.tar.xz")
+                                    await tarfiles(metaDir, ".", "../../lxd.tar.gz")
+                                    await tarfiles(rootfsDir, ".", "../../rootfs.tar.gz")
                                     fs.rmSync('./temp/' + id + "/backup", { recursive: true, force: true })
                                     console.log('[LXD] [' + id + '] Remove build container')
                                     client.put('/1.0/instances/' + id + "/state", JSON.stringify({
@@ -342,10 +344,10 @@ async function main() {
                                                         const FormData = require('form-data')
 
                                                         const data = new FormData()
-                                                        data.append('rootfs', fs.createReadStream('./temp/' + id + "/rootfs.tar.xz"))
-                                                        data.append('lxdmeta', fs.createReadStream('./temp/' + id + "/lxd.tar.xz"))
+                                                        data.append('rootfs', fs.createReadStream('./temp/' + id + "/rootfs.tar.gz"))
+                                                        data.append('lxdmeta', fs.createReadStream('./temp/' + id + "/lxd.tar.gz"))
                                                         data.append('aliases', config.aliases)
-                                                        data.append('architecture', sysarch == "x64" ? "amd64" : "arm64")
+                                                        data.append('architecture', sysarch == "amd64" ? "x86_64" : "aarch64")
                                                         data.append('os', config.os)
                                                         data.append('release', config.release)
                                                         data.append('releasetitle', config.release)
