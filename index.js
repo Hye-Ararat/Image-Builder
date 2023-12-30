@@ -7,13 +7,13 @@ const os = require("os");
  * @type {import('axios').Axios & {ws: (url) => import('ws').WebSocket}}
  */
 const client = new axios.Axios({
-    socketPath: "/var/snap/lxd/common/lxd/unix.socket",
+    socketPath: "/var/lib/incus/unix.socket",
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
     timeout: 9999999
 })
 client.ws = (url) => {
-    return new ws.WebSocket("ws+unix:///var/snap/lxd/common/lxd/unix.socket:" + url)
+    return new ws.WebSocket("ws+unix:///var/lib/incus/unix.socket:" + url)
 }
 function handleError(err) {
     console.log(err)
@@ -158,7 +158,7 @@ async function main() {
                 var zeroseconds = d.getSeconds() < 10 ? "0" : ""
                 var date = `${d.getFullYear()}-${zero + d.getMonth()}-${zeroday + d.getDate()}-${zerohours + d.getHours()}${zerominutes + d.getMinutes()}${zeroseconds + d.getSeconds()}`
                 var id = config.os.replace(' ', '-').replace('.', "") + "-" + config.release + "-" + date
-                console.log("[LXD] [" + id + "] Initializing instance...")
+                console.log("[Incus] [" + id + "] Initializing instance...")
                 client.post('/1.0/instances', JSON.stringify({
                     name: id,
                     "profiles": [
@@ -199,7 +199,7 @@ async function main() {
                                                 var opts = {
                                                     rejectUnauthorized: false,
                                                     method: "POST",
-                                                    socketPath: "/var/snap/lxd/common/lxd/unix.socket",
+                                                    socketPath: "/var/lib/incus/unix.socket",
                                                     path: encodeURI("/1.0/instances/" + id + "/files?path=" + file.split(':')[1]),
                                                     headers: {
                                                         "Content-Type": `application/octet-stream`
@@ -241,7 +241,7 @@ async function main() {
                                     }
 
                                 }
-                                console.log("[LXD] [" + id + "] Done initializing instance")
+                                console.log("[Incus] [" + id + "] Done initializing instance")
                                 for (const command of config.commands) {
                                     await new Promise(async (re, rej) => {
                                         console.log('[Exec] [' + id + '] Running command ' + command)
@@ -319,10 +319,10 @@ async function main() {
                                     }
                                     console.log('[Editor] [' + id + '] Done editing metadata')
                                     console.log('[Archive] [' + id + '] Compressing files')
-                                    await tarfiles(metaDir, ".", "../../lxd.tar.gz")
+                                    await tarfiles(metaDir, ".", "../../incus.tar.gz")
                                     await tarfiles(rootfsDir, ".", "../../rootfs.tar.gz")
                                     fs.rmSync('./temp/' + id + "/backup", { recursive: true, force: true })
-                                    console.log('[LXD] [' + id + '] Remove build container')
+                                    console.log('[Incus] [' + id + '] Remove build container')
                                     client.put('/1.0/instances/' + id + "/state", JSON.stringify({
                                         "action": "stop",
                                         "force": true,
@@ -334,7 +334,7 @@ async function main() {
                                         //console.log(JSON.parse(start_data.data).operation + "/wait?timeout=9999")
                                         client.get(JSON.parse(start_data2.data).operation + "/wait?timeout=9999").then(async (start_operation2) => {
                                             await client.delete('/1.0/instances/' + id)
-                                            console.log('[LXD] [' + id + '] Removed build container')
+                                            console.log('[Incus] [' + id + '] Removed build container')
 
                                             if (require('./config.json').server['do-upload'] == true) {
                                                 console.log('[Remote] [' + id + '] Uploading is enabled')
@@ -345,7 +345,7 @@ async function main() {
 
                                                         const data = new FormData()
                                                         data.append('rootfs', fs.createReadStream('./temp/' + id + "/rootfs.tar.gz"))
-                                                        data.append('lxdmeta', fs.createReadStream('./temp/' + id + "/lxd.tar.gz"))
+                                                        data.append('incusmeta', fs.createReadStream('./temp/' + id + "/incus.tar.gz"))
                                                         data.append('aliases', config.aliases)
                                                         data.append('architecture', sysarch == "amd64" ? "x86_64" : "aarch64")
                                                         data.append('os', config.os)
