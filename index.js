@@ -50,7 +50,7 @@ function untar(path, out) {
 function tarfiles(cwd, path, out) {
     return new Promise((resolve, reject) => {
         // fs.mkdirSync(out)
-        var tar = spawn('sh', ['-c', `tar -czf ${out} ${path}`], {
+        var tar = spawn('sh', ['-c', `tar -cJf ${out} ${path}`], {
             env: {
                 "XZ_DEFAULTS": "-T 8"
             },
@@ -86,7 +86,7 @@ function doExport(id) {
             await client.get(export_data.operation + "/wait?timeout=99999")
             client.get('/1.0/instances/' + id + "/backups/" + id + "-export" + "/export", { responseType: "stream" }).then((s) => {
                 fs.mkdirSync('./temp/' + id)
-                var writer = fs.createWriteStream('./temp/' + id + "/backup.tar.gz")
+                var writer = fs.createWriteStream('./temp/' + id + "/backup.tar.xz")
                 s.data.pipe(writer)
                 let error = null;
                 writer.on('error', err => {
@@ -279,7 +279,7 @@ async function main() {
                                     await doExport(id)
                                     console.log('[Export] [' + id + '] Extracting backup')
                                     fs.mkdirSync('./temp/' + id + "/backup")
-                                    await untar('./temp/' + id + "/backup.tar.gz", './temp/' + id + "/backup")
+                                    await untar('./temp/' + id + "/backup.tar.xz", './temp/' + id + "/backup")
                                     console.log('[Export] [' + id + '] Moving directories')
                                     //fs.mkdirSync('./temp/' + id + "/backup/rootfs")
                                     //fs.mkdirSync('./temp/' + id + "/backup/meta")
@@ -302,8 +302,8 @@ async function main() {
                                         yamlparsed.templates[temp] = tempData;
                                     }
                                     console.log('[Editor] [' + id + '] Edit Properties')
-                                    yamlparsed.architecture = sysarch == "amd64" ? "x86_64" : "aarch64"
-                                    yamlparsed.properties.architecture = sysarch == "amd64" ? "x86_64" : "aarch64"
+                                    yamlparsed.architecture = sysarch == "amd64" ? "amd64" : "aarch64"
+                                    yamlparsed.properties.architecture = sysarch == "amd64" ? "amd64" : "aarch64"
                                     yamlparsed.properties.name = config.os
                                     yamlparsed.properties.os = config.os
                                     yamlparsed.properties.release = config.release
@@ -319,8 +319,8 @@ async function main() {
                                     }
                                     console.log('[Editor] [' + id + '] Done editing metadata')
                                     console.log('[Archive] [' + id + '] Compressing files')
-                                    await tarfiles(metaDir, ".", "../../incus.tar.gz")
-                                    await tarfiles(rootfsDir, ".", "../../rootfs.tar.gz")
+                                    await tarfiles(metaDir, ".", "../../incus.tar.xz")
+                                    await tarfiles(rootfsDir, ".", "../../rootfs.tar.xz")
                                     fs.rmSync('./temp/' + id + "/backup", { recursive: true, force: true })
                                     console.log('[Incus] [' + id + '] Remove build container')
                                     client.put('/1.0/instances/' + id + "/state", JSON.stringify({
@@ -344,10 +344,10 @@ async function main() {
                                                         const FormData = require('form-data')
 
                                                         const data = new FormData()
-                                                        data.append('rootfs', fs.createReadStream('./temp/' + id + "/rootfs.tar.gz"))
-                                                        data.append('incusmeta', fs.createReadStream('./temp/' + id + "/incus.tar.gz"))
+                                                        data.append('rootfs', fs.createReadStream('./temp/' + id + "/rootfs.tar.xz"))
+                                                        data.append('incusmeta', fs.createReadStream('./temp/' + id + "/incus.tar.xz"))
                                                         data.append('aliases', config.aliases)
-                                                        data.append('architecture', sysarch == "amd64" ? "x86_64" : "aarch64")
+                                                        data.append('architecture', sysarch == "amd64" ? "amd64" : "aarch64")
                                                         data.append('os', config.os)
                                                         data.append('release', config.release)
                                                         data.append('releasetitle', config.release)
@@ -409,3 +409,10 @@ async function main() {
     })
 }
 main().catch(console.log)
+
+//what is the structure of config.json for the image builder, not for the images
+/*
+{
+    
+}
+*/
