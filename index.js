@@ -157,7 +157,7 @@ async function main() {
                 var zerohours = d.getHours() < 10 ? "0" : ""
                 var zerominutes = d.getMinutes() < 10 ? "0" : ""
                 var zeroseconds = d.getSeconds() < 10 ? "0" : ""
-                var date = `${d.getFullYear()}-${zero + d.getMonth()}-${zeroday + d.getDate()}-${zerohours + d.getHours()}${zerominutes + d.getMinutes()}${zeroseconds + d.getSeconds()}`
+                var date = `${d.getFullYear()}-${zero + d.getMonth() + 1}-${zeroday + d.getDate()}-${zerohours + d.getHours()}${zerominutes + d.getMinutes()}${zeroseconds + d.getSeconds()}`
                 var id = config.os.replace(' ', '-').replace('.', "") + "-" + config.release + "-" + date
                 console.log("[Incus] [" + id + "] Initializing instance...")
                 client.post('/1.0/instances', JSON.stringify({
