@@ -20,7 +20,8 @@ function handleError(err) {
     process.exit(1)
 }
 
-const { spawn } = require('child_process')
+const { spawn } = require('child_process');
+const downloadBase = require('./downloadBase');
 function untar(path, out) {
     return new Promise((resolve, reject) => {
         // fs.mkdirSync(out)
@@ -308,6 +309,16 @@ async function main() {
                                     yamlparsed.properties.os = config.os
                                     yamlparsed.properties.release = config.release
                                     yamlparsed.properties.release = config.release
+                                    let key = await downloadBase(config.imageserver, config.base);
+                                    let baseYaml = fs.readFileSync(`./temp/${key}/metadata.yaml`).toString();
+                                    let baseParsed = yaml.parse(baseYaml);
+                                    let baseTemplates = Object.keys(baseParsed.templates);
+                                    for (let i = 0; i < baseTemplates.length; i++) {
+                                        const temp = baseTemplates[i];
+                                        console.log('[Editor] [' + id + '] Adding template ' + temp + ' to config');
+                                        const tempData = baseParsed.templates[temp];
+                                        yamlparsed.templates[temp] = tempData;
+                                    }
                                     fs.writeFileSync(metaDir + "/metadata.yaml", yaml.stringify(yamlparsed))
                                     console.log('[Templating] [' + id + '] Adding templates')
                                     if (fs.existsSync(`./images/${image}/templates`)) {
@@ -315,6 +326,11 @@ async function main() {
                                     for (const template of templates) {
                                         console.log('[Templating] [' + id + '] Adding template ' + template)
                                         fs.cpSync(`./images/${image}` +"/templates" + "/" + template, metaDir + "/templates" + "/" + template);
+                                    }
+                                    let baseTemplates = fs.readdirSync(`./temp/${key}/templates`);
+                                    for (const template of baseTemplates) {
+                                        console.log('[Templating] [' + id + '] Adding template ' + template)
+                                        fs.cpSync(`./temp/${key}/templates` + "/" + template, metaDir + "/templates" + "/" + template);
                                     }
                                     }
                                     console.log('[Editor] [' + id + '] Done editing metadata')
