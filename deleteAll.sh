@@ -1,0 +1,1 @@
+incus list -fcsv -cn | xargs incus delete -f
