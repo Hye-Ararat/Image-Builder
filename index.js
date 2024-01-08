@@ -150,15 +150,15 @@ async function main() {
                 var sysarch = os.arch()
                 if (sysarch == "x64") sysarch = "amd64";
                 if (!config.architectures.includes(sysarch)) handleError(new Error("System architecture " + sysarch + " is not supported by " + image + "."))
-                
+
                 var d = new Date()
                 var zero = d.getMonth() < 10 ? "0" : ""
                 var zeroday = d.getDate() < 10 ? "0" : ""
                 var zerohours = d.getHours() < 10 ? "0" : ""
                 var zerominutes = d.getMinutes() < 10 ? "0" : ""
                 var zeroseconds = d.getSeconds() < 10 ? "0" : ""
-                var date = `${d.getFullYear()}-${zero + d.getMonth() + 1}-${zeroday + d.getDate()}-${zerohours + d.getHours()}${zerominutes + d.getMinutes()}${zeroseconds + d.getSeconds()}`
-                var id = config.os.replace(' ', '-').replace('.', "") + "-" + config.release + "-" + date
+                var date = `${d.getFullYear()}-${zero + (d.getMonth() + 1)}-${zeroday + d.getDate()}-${zerohours + d.getHours()}${zerominutes + d.getMinutes()}${zeroseconds + d.getSeconds()}`
+                var id = config.os.replace(' ', '-').replace('.', "") + "-" + config.release.replaceAll(' ', '-').replaceAll('.', "-") + "-" + date
                 console.log("[Incus] [" + id + "] Initializing instance...")
                 client.post('/1.0/instances', JSON.stringify({
                     name: id,
@@ -260,6 +260,7 @@ async function main() {
                                         //    exec: exec_data.operation + "/websocket?secret=" + exec_data.metadata.metadata.fds['0'],
                                         //   control: exec_data.operation + "/websocket?secret=" + exec_data.metadata.metadata.fds['control']
                                         //})
+                                        //console.log(exec_data)
                                         var execws = client.ws(exec_data.operation + "/websocket?secret=" + exec_data.metadata.metadata.fds['0'])
                                         var controlws = client.ws(exec_data.operation + "/websocket?secret=" + exec_data.metadata.metadata.fds['control'])
                                         execws.on('message', (data) => {
@@ -269,7 +270,7 @@ async function main() {
                                                 controlws.close()
                                             }
                                             if (data.toString() == "\n") return;
-                                            console.log(data.toString().replace('\r\n', "").replace('\n', "").replace('\r', ""))
+                                            //console.log(data.toString().replace('\r\n', "").replace('\n', "").replace('\r', ""))
                                         })
                                     }).catch(handleError)
 
@@ -322,16 +323,16 @@ async function main() {
                                     fs.writeFileSync(metaDir + "/metadata.yaml", yaml.stringify(yamlparsed))
                                     console.log('[Templating] [' + id + '] Adding templates')
                                     if (fs.existsSync(`./images/${image}/templates`)) {
-                                    let templates = fs.readdirSync(`./images/${image}/templates`);
-                                    for (const template of templates) {
-                                        console.log('[Templating] [' + id + '] Adding template ' + template)
-                                        fs.cpSync(`./images/${image}` +"/templates" + "/" + template, metaDir + "/templates" + "/" + template);
-                                    }
-                                    let baseTemplates = fs.readdirSync(`./temp/${key}/templates`);
-                                    for (const template of baseTemplates) {
-                                        console.log('[Templating] [' + id + '] Adding template ' + template)
-                                        fs.cpSync(`./temp/${key}/templates` + "/" + template, metaDir + "/templates" + "/" + template);
-                                    }
+                                        let templates = fs.readdirSync(`./images/${image}/templates`);
+                                        for (const template of templates) {
+                                            console.log('[Templating] [' + id + '] Adding template ' + template)
+                                            fs.cpSync(`./images/${image}` + "/templates" + "/" + template, metaDir + "/templates" + "/" + template);
+                                        }
+                                        let baseTemplates = fs.readdirSync(`./temp/${key}/templates`);
+                                        for (const template of baseTemplates) {
+                                            console.log('[Templating] [' + id + '] Adding template ' + template)
+                                            fs.cpSync(`./temp/${key}/templates` + "/" + template, metaDir + "/templates" + "/" + template);
+                                        }
                                     }
                                     console.log('[Editor] [' + id + '] Done editing metadata')
                                     console.log('[Archive] [' + id + '] Compressing files')
