@@ -3,6 +3,7 @@ const ws = require('ws')
 const fs = require('fs')
 const path = require("path");
 const os = require("os");
+
 /**
  * @type {import('axios').Axios & {ws: (url) => import('ws').WebSocket}}
  */
@@ -13,6 +14,7 @@ const client = new axios.Axios({
     timeout: 9999999
 })
 client.ws = (url) => {
+    console.log("new WS", url)
     return new ws.WebSocket("ws+unix:///var/lib/incus/unix.socket:" + url)
 }
 function handleError(err) {
@@ -197,6 +199,7 @@ async function main() {
                                             try {
                                                 console.log('[Upload] [' + id + '] Uploading file ' + file.split(':')[0])
                                                 const https = require('http')
+                                                https.globalAgent.maxSockets = 5000
                                                 var opts = {
                                                     rejectUnauthorized: false,
                                                     method: "POST",
@@ -211,6 +214,10 @@ async function main() {
                                                         rej(err)
                                                     })
                                                 });
+                                                request.on("error", (err) => {
+                                                    console.log(err)
+                                                    console.log("AHAHA I FOUND THE ISSUE HTTP BOOBOO")
+                                                })
                                                 console.log(fs.existsSync(`./images/${image}/files/${file.split(':')[0]}`))
                                                 var ReadStream = fs.createReadStream(`./images/${image}/files/${file.split(':')[0]}`)
                                                 var bytes = 0
@@ -253,6 +260,7 @@ async function main() {
                                                 "wait-for-websocket": true
                                             }))).data)
                                         } catch (error) {
+                                            console.log("The error is on request websocket (create operation)")
                                             handleError(error)
                                         }
                                         //onsole.log(exec_data.metadata.metadata.fds)
@@ -260,9 +268,20 @@ async function main() {
                                         //    exec: exec_data.operation + "/websocket?secret=" + exec_data.metadata.metadata.fds['0'],
                                         //   control: exec_data.operation + "/websocket?secret=" + exec_data.metadata.metadata.fds['control']
                                         //})
-                                        //console.log(exec_data)
-                                        var execws = client.ws(exec_data.operation + "/websocket?secret=" + exec_data.metadata.metadata.fds['0'])
-                                        var controlws = client.ws(exec_data.operation + "/websocket?secret=" + exec_data.metadata.metadata.fds['control'])
+                                        console.log(JSON.stringify(exec_data))
+                                        try {
+                                            var execws = client.ws(exec_data.operation + "/websocket?secret=" + exec_data.metadata.metadata.fds['0'])
+                                            var controlws = client.ws(exec_data.operation + "/websocket?secret=" + exec_data.metadata.metadata.fds['control'])
+                                        } catch (error) {
+                                            console.log("the error is on WS")
+                                            handleError(error);
+                                        }
+                                        execws.on("error", () => {
+                                            console.log("error is on execws event")
+                                        })
+                                        controlws.on("error", () => {
+                                            console.log("error is on controlws event")
+                                        })
                                         execws.on('message', (data) => {
                                             if (data.toString() == "") {
                                                 re()
@@ -272,7 +291,9 @@ async function main() {
                                             if (data.toString() == "\n") return;
                                             //console.log(data.toString().replace('\r\n', "").replace('\n', "").replace('\r', ""))
                                         })
-                                    }).catch(handleError)
+                                    }).catch(() => {
+                                        console.log("Error is somewhere in exec command")
+                                    })
 
                                 }
 
@@ -421,7 +442,12 @@ async function main() {
                 }).catch(handleError)
             }))
         }
-        await Promise.all(jobs)
+        const chunkSize = 10;
+        for (let i = 0; i < jobs.length; i += chunkSize) {
+            const chunk = jobs.slice(i, i + chunkSize);
+            console.log(`Run 10 jobs`)
+            await Promise.all(chunk)
+        }
         p()
     })
 }
